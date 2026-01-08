@@ -9,6 +9,7 @@ import {
   Brain,
   Sparkles,
 } from "lucide-react";
+//hiiii
 
 export default function FileUpload({ onUpload, isUploading }) {
   const [dragActive, setDragActive] = useState(false);
