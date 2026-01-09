@@ -88,7 +88,10 @@ async def upload_dataset(
         # -----------------------------
         # FAST analysis (blocking but quick)
         # -----------------------------
-        analysis_result = process_and_analyze_dataset(temp_path)
+        analysis_result = process_and_analyze_dataset(
+                file_path=temp_path,
+                dataset_id=dataset_id
+            )
 
         dataset_db[dataset_id]["analysis_status"] = "completed"
         dataset_db[dataset_id]["analysis_result"] = analysis_result

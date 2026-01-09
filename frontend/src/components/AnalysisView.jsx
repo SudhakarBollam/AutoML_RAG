@@ -111,6 +111,11 @@ useEffect(() => {
           value={analysis.statistical_summary.total_rows.toLocaleString()}
         />
         <StatCard
+          icon={<Target className="w-4 h-4 text-red-500" />}
+          label="Target Column"
+          value={analysis.target_column}
+        />
+        <StatCard
           icon={<Target className="w-4 h-4 text-purple-500" />}
           label="Columns"
           value={analysis.statistical_summary.total_columns}
@@ -130,7 +135,7 @@ useEffect(() => {
       {/* Tabs */}
       <div>
         <div className="flex border-b">
-          {['models', 'features', 'insights', 'preprocessing'].map((tab) => (
+          {['models', 'metrics', 'features', 'insights', 'preprocessing'].map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -221,6 +226,31 @@ useEffect(() => {
             </table>
           </div>
         )}
+        {/* METRICS */}
+        {activeTab === 'metrics' && (
+  <div className="mt-6 overflow-x-auto">
+    <table className="w-full border text-sm">
+      <thead className="bg-gray-50">
+        <tr>
+          {['Model', 'Accuracy', 'Precision', 'Recall', 'F1 Score'].map(h => (
+            <th key={h} className="p-3 border text-left">{h}</th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {analysis.model_metrics.map((m, i) => (
+          <tr key={i} className="border-t">
+            <td className="p-3 font-semibold">{m.model}</td>
+            <td className="p-3">{(m.accuracy * 100).toFixed(2)}%</td>
+            <td className="p-3">{m.precision}</td>
+            <td className="p-3">{m.recall}</td>
+            <td className="p-3">{m.f1_score}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+)}
 
         {/* INSIGHTS */}
         {activeTab === 'insights' && (
