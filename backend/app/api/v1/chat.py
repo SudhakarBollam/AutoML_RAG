@@ -27,7 +27,7 @@ async def chat_with_dataset(request: ChatRequest):
         # 1. Initialize Model
      #***************** ONLY FOR OLLAMA(MISTRAL) USAGE *****************************
         model = ChatOllama(
-            model="mistral",
+            model="mistral:latest",
             temperature=0.7
         )
     #***************** ONLY FOR GOOGLE GENAI USAGE *****************************

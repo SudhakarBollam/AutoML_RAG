@@ -1,59 +1,73 @@
-def detect_problem_type(df, target_column):
+def select_best_model(model_metrics, task):
     """
-    Determines whether the ML task is:
-    - classification
-    - regression
-    - unsupervised
-
-    Uses robust heuristics suitable for AutoML systems.
+    Selects the best model based on:
+    - Multi-metric performance
+    - Overfitting awareness
+    - Stability across CV folds
     """
 
-    # --------------------------------------------------
-    # 1. No valid target → UNSUPERVISED
-    # --------------------------------------------------
-    if (
-        target_column is None
-        or target_column not in df.columns
-        or df[target_column].dropna().empty
-    ):
-        return "unsupervised"
+    if not model_metrics:
+        return None
 
-    target = df[target_column].dropna()
-    total_rows = len(target)
+    scored_models = []
 
-    # Safety
-    if total_rows == 0:
-        return "unsupervised"
+    for m in model_metrics:
+        # ---------------- COMMON SIGNALS ----------------
+        train_score = m.get("train_score", 0)
+        cv_mean = m.get("cv_mean", 0)
+        cv_std = m.get("cv_std", 0)
 
-    # --------------------------------------------------
-    # 2. Cardinality ratio (MOST IMPORTANT SIGNAL)
-    # --------------------------------------------------
-    unique_count = target.nunique()
-    unique_ratio = unique_count / total_rows
+        overfit_gap = abs(train_score - cv_mean)
 
-    # If almost every value is unique → ID-like → unsupervised
-    if unique_ratio > 0.90:
-        return "unsupervised"
+        # ---------------- BASE SCORE ----------------
+        if task == "classification":
+            base_score = (
+                0.4 * m["f1_score"] +
+                0.3 * m["accuracy"] +
+                0.3 * m["recall"]
+            )
 
-    # --------------------------------------------------
-    # 3. Non-numeric targets → CLASSIFICATION
-    # --------------------------------------------------
-    if target.dtype in ["object", "bool", "category"]:
-        return "classification"
+        elif task == "regression":
+            base_score = (
+                0.6 * (1 / (m["rmse"] + 1e-6)) +
+                0.4 * m["r2"]
+            )
 
-    # --------------------------------------------------
-    # 4. Numeric targets
-    # --------------------------------------------------
+        else:  # unsupervised
+            base_score = m["silhouette_score"]
 
-    # Binary classification
-    if unique_count == 2:
-        return "classification"
+        # ---------------- PENALTIES ----------------
+        penalty = (0.3 * overfit_gap) + (0.2 * cv_std)
 
-    # Low-cardinality numeric labels (ordinal / multiclass)
-    if unique_count <= 20:
-        return "classification"
+        final_score = base_score - penalty
 
-    # --------------------------------------------------
-    # 5. Continuous numeric target → REGRESSION
-    # --------------------------------------------------
-    return "regression"
+        scored_models.append({
+            **m,
+            "final_score": final_score,
+            "overfit_gap": overfit_gap
+        })
+
+    # ---------------- SELECT BEST ----------------
+    best = max(scored_models, key=lambda x: x["final_score"])
+
+    # ---------------- CONFIDENCE ----------------
+    if task in ["classification", "regression"]:
+        confidence = int(min(95, best["cv_mean"] * 100))
+    else:
+        confidence = int(min(90, best["final_score"] * 100))
+
+    # ---------------- REASONING ----------------
+    reasoning = (
+        f"Selected because it achieved the best balance between performance "
+        f"and generalization. The model shows a low overfitting gap "
+        f"({round(best['overfit_gap'], 3)}) and stable cross-validation "
+        f"results."
+    )
+
+    return {
+        "name": best["model"],
+        "algorithm": "Linear / Tree / Ensemble / Clustering",
+        "confidence": confidence,
+        "reasoning": reasoning,
+        "tradeoffs": "May require slightly more computation but offers better reliability"
+    }

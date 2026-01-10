@@ -1,5 +1,14 @@
 import { useState ,useEffect} from 'react';
 import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
+
+import {
   ArrowLeft,
   Download,
   Brain,
@@ -16,7 +25,8 @@ import {
 export default function AnalysisView({ dataset, onBack, onChat }) {
   const analysis = dataset?.analysis_result;
   const [activeTab, setActiveTab] = useState('models');
-  const [ragStatus, setRagStatus] = useState(dataset.rag_status);
+  const [ragStatus, setRagStatus] = useState(dataset?.rag_status ?? 'pending');
+
 
 useEffect(() => {
   if (ragStatus === 'ready') return;
@@ -135,7 +145,7 @@ useEffect(() => {
       {/* Tabs */}
       <div>
         <div className="flex border-b">
-          {['models', 'metrics', 'features', 'insights', 'preprocessing'].map((tab) => (
+          {['models', 'metrics', 'features','distributions','insights', 'preprocessing'].map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -173,10 +183,10 @@ useEffect(() => {
               <p className="mb-4">{analysis.best_model.reasoning}</p>
               <div className="bg-white p-4 rounded-md border">
                 <p className="text-sm font-semibold mb-1">
-                  Implementation Notes
+                  Why this model?
                 </p>
                 <p className="text-sm text-gray-600">
-                  {analysis.best_model.implementation_notes}
+                  {analysis.best_model.reasoning}
                 </p>
               </div>
             </div>
@@ -228,29 +238,76 @@ useEffect(() => {
         )}
         {/* METRICS */}
         {activeTab === 'metrics' && (
-  <div className="mt-6 overflow-x-auto">
-    <table className="w-full border text-sm">
-      <thead className="bg-gray-50">
-        <tr>
-          {['Model', 'Accuracy', 'Precision', 'Recall', 'F1 Score'].map(h => (
-            <th key={h} className="p-3 border text-left">{h}</th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {analysis.model_metrics.map((m, i) => (
-          <tr key={i} className="border-t">
-            <td className="p-3 font-semibold">{m.model}</td>
-            <td className="p-3">{(m.accuracy * 100).toFixed(2)}%</td>
-            <td className="p-3">{m.precision}</td>
-            <td className="p-3">{m.recall}</td>
-            <td className="p-3">{m.f1_score}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  </div>
-)}
+          <div className="mt-6 overflow-x-auto">
+            <table className="w-full border text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  {['Model', 'Accuracy', 'Precision', 'Recall', 'F1 Score'].map(h => (
+                    <th key={h} className="p-3 border text-left">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {analysis.model_metrics.map((m, i) => (
+                  <tr key={i} className="border-t">
+                    <td className="p-3 font-semibold">{m.model}</td>
+                    <td className="p-3">{(m.accuracy * 100).toFixed(2)}%</td>
+                    <td className="p-3">{(m.precision * 100).toFixed(2)}%</td>
+                    <td className="p-3">{(m.recall * 100).toFixed(2)}%</td>
+                    <td className="p-3">{(m.f1_score * 100).toFixed(2)}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {/* DISTRIBUTIONS */}
+        {activeTab === 'distributions' && (
+          <div className="mt-6 overflow-x-auto">
+            {analysis.numeric_distributions &&
+            Object.keys(analysis.numeric_distributions).length > 0 ? (
+              <table className="w-full border text-sm">
+                <thead className="bg-gray-50">
+                  <tr>
+                    {[
+                      'Feature',
+                      'Mean',
+                      'Median',
+                      'Std',
+                      'Min',
+                      'Max',
+                      'Skewness',
+                    ].map((h) => (
+                      <th key={h} className="p-3 text-left border">
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(analysis.numeric_distributions).map(
+                    ([feature, stats], i) => (
+                      <tr key={i} className="border-t">
+                        <td className="p-3 font-mono">{feature}</td>
+                        <td className="p-3">{stats.mean}</td>
+                        <td className="p-3">{stats.median}</td>
+                        <td className="p-3">{stats.std}</td>
+                        <td className="p-3">{stats.min}</td>
+                        <td className="p-3">{stats.max}</td>
+                        <td className="p-3">{stats.skewness}</td>
+                      </tr>
+                    )
+                  )}
+                </tbody>
+              </table>
+            ) : (
+              <p className="text-gray-500">
+                No numeric distributions available for this dataset.
+              </p>
+            )}
+          </div>
+        )}
+
 
         {/* INSIGHTS */}
         {activeTab === 'insights' && (
@@ -278,36 +335,96 @@ useEffect(() => {
             ))}
           </div>
         )}
+        {activeTab === "preprocessing" && (
+        <div className="mt-6 space-y-8">
 
-        {/* PREPROCESSING */}
-        {activeTab === 'preprocessing' && (
-          <div className="mt-6 space-y-4">
-            {analysis.preprocessing_steps.map((step, i) => (
-              <div
-                key={i}
-                className="border rounded-lg p-4 flex gap-4"
-              >
-                <Wrench className="w-5 h-5 mt-1 text-gray-500" />
-                <div>
-                  <h4 className="font-semibold">{step.step}</h4>
-                  <p className="text-sm text-gray-600 mb-2">
-                    {step.description}
-                  </p>
-                  <div className="flex flex-wrap gap-1">
-                    {step.affected_columns.map((c, j) => (
-                      <span
-                        key={j}
-                        className="px-2 py-1 text-xs bg-gray-100 rounded font-mono"
-                      >
-                        {c}
-                      </span>
-                    ))}
+          {/* FLOWCHART */}
+          <div>
+            <h3 className="text-lg font-semibold mb-3">Preprocessing Flow</h3>
+            <div className="flex flex-wrap items-center gap-3 text-sm">
+              {analysis.preprocessing_report.flow.map((step, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <div className="px-3 py-2 border rounded bg-gray-50 font-medium">
+                    {step}
                   </div>
+                  {i < analysis.preprocessing_report.flow.length - 1 && (
+                    <span className="text-gray-400">→</span>
+                  )}
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        )}
+
+          {/* STRATEGY SUMMARY */}
+          <div className="border rounded-lg p-4 bg-white">
+            <h4 className="font-semibold mb-2">Preprocessing Summary</h4>
+            <p className="text-sm text-gray-700">
+              Numeric features were processed using <b>{analysis.preprocessing_report.numeric_strategy}</b>.
+              Categorical features were processed using <b>{analysis.preprocessing_report.categorical_strategy}</b>.
+              Feature space expanded from{" "}
+              <b>{analysis.preprocessing_report.total_features_before}</b> to{" "}
+              <b>{analysis.preprocessing_report.total_features_after}</b> features.
+            </p>
+          </div>
+
+          {/* MISSING VALUES BAR CHART */}
+          <div>
+            <h4 className="font-semibold mb-3">Missing Values (Before Preprocessing)</h4>
+
+            {Object.keys(analysis.missing_summary).length > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart
+                  data={Object.entries(analysis.missing_summary).map(
+                    ([feature, missing]) => ({ feature, missing })
+                  )}
+                >
+                  <XAxis dataKey="feature" />
+                  <YAxis />
+                  <Tooltip />
+                  <Bar dataKey="missing" fill="#f59e0b" />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <p className="text-sm text-gray-500">No missing values detected.</p>
+            )}
+          </div>
+
+          {/* NUMERIC DISTRIBUTIONS TABLE */}
+          <div>
+            <h4 className="font-semibold mb-3">Numeric Feature Distributions (Raw Data)</h4>
+
+            <div className="overflow-x-auto">
+              <table className="w-full border text-sm">
+                <thead className="bg-gray-50">
+                  <tr>
+                    {["Feature", "Mean", "Median", "Std", "Min", "Max", "Skewness"].map(h => (
+                      <th key={h} className="p-3 border text-left">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(analysis.numeric_distributions).map(
+                    ([feature, stats], i) => (
+                      <tr key={i} className="border-t">
+                        <td className="p-3 font-mono">{feature}</td>
+                        <td className="p-3">{stats.mean}</td>
+                        <td className="p-3">{stats.median}</td>
+                        <td className="p-3">{stats.std}</td>
+                        <td className="p-3">{stats.min}</td>
+                        <td className="p-3">{stats.max}</td>
+                        <td className="p-3">{stats.skewness}</td>
+                      </tr>
+                    )
+                  )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  )}
+
+        
       </div>
     </div>
   );

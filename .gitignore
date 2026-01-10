@@ -99,3 +99,11 @@ ENV/
 # SYSTEM FILES
 ############################
 Thumbs.db
+# Data files (runtime only)
+backend/app/data/
+*.csv
+*.parquet
+
+# Python cache & env
+venv/
+__pycache__/
