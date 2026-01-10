@@ -23,10 +23,33 @@ import {
 } from 'lucide-react';
 
 export default function AnalysisView({ dataset, onBack, onChat }) {
+  
   const analysis = dataset?.analysis_result;
   const [activeTab, setActiveTab] = useState('models');
   const [ragStatus, setRagStatus] = useState(dataset?.rag_status ?? 'pending');
-
+  console.log(dataset.analysis_status, dataset.analysis_result);
+  if (
+    !dataset ||
+    dataset.analysis_status !== "completed" ||
+    !analysis ||
+    !analysis.statistical_summary
+  ) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] text-center">
+        <AlertTriangle className="w-12 h-12 text-yellow-500 mb-4" />
+        <h3 className="text-lg font-semibold mb-2">Analysis Not Ready</h3>
+        <p className="text-gray-500 mb-4">
+          Waiting for valid analysis results.
+        </p>
+        <button
+          onClick={onBack}
+          className="px-4 py-2 border rounded-md hover:bg-gray-50"
+        >
+          Go Back
+        </button>
+      </div>
+    );
+  }
 
 useEffect(() => {
   if (ragStatus === 'ready') return;
@@ -342,7 +365,7 @@ useEffect(() => {
           <div>
             <h3 className="text-lg font-semibold mb-3">Preprocessing Flow</h3>
             <div className="flex flex-wrap items-center gap-3 text-sm">
-              {analysis.preprocessing_report.flow.map((step, i) => (
+              {analysis?.preprocessing_report?.flow?.map((step, i) => (
                 <div key={i} className="flex items-center gap-2">
                   <div className="px-3 py-2 border rounded bg-gray-50 font-medium">
                     {step}

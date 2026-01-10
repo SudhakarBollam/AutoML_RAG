@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, BackgroundTasks
+from fastapi import FastAPI, UploadFile, File, BackgroundTasks, Form
 from fastapi.middleware.cors import CORSMiddleware
 import uuid
 import os
@@ -54,7 +54,8 @@ def run_rag_background(file_path: str, dataset_id: str):
 @app.post("/api/v1/upload")
 async def upload_dataset(
     background_tasks: BackgroundTasks,
-    file: UploadFile = File(...)
+    file: UploadFile = File(...),
+    target_column: str | None = Form(None)
 ):
     dataset_id = str(uuid.uuid4())
     temp_path = f"app/data/raw/{dataset_id}_{file.filename}"
@@ -84,29 +85,32 @@ async def upload_dataset(
         "rag_status": "pending",
     }
 
+    # main.py
+
+# ... inside upload_dataset endpoint ...
     try:
-        # -----------------------------
-        # FAST analysis (blocking but quick)
-        # -----------------------------
-        analysis_result = process_and_analyze_dataset(
-                file_path=temp_path,
-                dataset_id=dataset_id
-            )
-
-        dataset_db[dataset_id]["analysis_status"] = "completed"
-        dataset_db[dataset_id]["analysis_result"] = analysis_result
-
-        # -----------------------------
-        # SLOW RAG (background)
-        # -----------------------------
-        background_tasks.add_task(
-            run_rag_background,
-            temp_path,
-            dataset_id
+        result = process_and_analyze_dataset(
+            file_path=temp_path,
+            dataset_id=dataset_id,
+            user_target_column=target_column
         )
 
+        # 1. Handle the "Did you mean...?" scenario
+        if result.get("analysis_status") == "needs_user_input":
+            dataset_db[dataset_id]["analysis_status"] = "needs_user_input"
+            dataset_db[dataset_id]["analysis_result"] = result # Store the whole suggestion dict
+            return dataset_db[dataset_id]
+
+        # 2. Handle the "Success" scenario
+        dataset_db[dataset_id]["analysis_status"] = "completed"
+        # Use .get() to avoid KeyError if something goes wrong
+        dataset_db[dataset_id]["analysis_result"] = result.get("analysis_result") 
+
+        # 3. Start RAG
+        background_tasks.add_task(run_rag_background, temp_path, dataset_id)
+
     except Exception as e:
-        print(f"Analysis error for {dataset_id}: {e}")
+        print(f"❌ Analysis error for {dataset_id}: {e}")
         dataset_db[dataset_id]["analysis_status"] = "failed"
         dataset_db[dataset_id]["error_message"] = str(e)
 

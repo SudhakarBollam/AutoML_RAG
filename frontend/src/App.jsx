@@ -13,53 +13,75 @@ export default function App() {
   const [chatDataset, setChatDataset] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
 
-  /* ---------------- Handlers ---------------- */
+  /* ---------------- Upload Handler ---------------- */
+  // App.jsx
+// App.jsx
+const handleUpload = async (file, targetCol) => { // 1. Accept targetCol
+  setIsUploading(true);
+  const formData = new FormData();
+  formData.append('file', file);
+  
+  // 2. IMPORTANT: Send the target column to the backend
+  if (targetCol) {
+    formData.append('target_column', targetCol);
+  }
 
-  // 1. Upload Handler with Polling
-  const handleUpload = async (file) => {
-    setIsUploading(true);
-    const formData = new FormData();
-    formData.append('file', file);
+  try {
+    const response = await fetch('http://localhost:8000/api/v1/upload', {
+      method: 'POST',
+      body: formData,
+    });
+    
+    if (!response.ok) throw new Error("Server error during upload");
+    
+    const initialData = await response.json();
+    
+    // 3. CHECK FOR TYPO BEFORE ADDING CARD
+    // App.jsx inside handleUpload
+if (initialData.analysis_status === 'needs_user_input') {
+    const suggestions = initialData.suggested_targets;
+    const suggestionText = suggestions && suggestions.length > 0 
+        ? suggestions.join(', ') 
+        : "no similar columns found. Please check your spelling.";
 
-    try {
-      const response = await fetch('http://localhost:8000/api/v1/upload', {
-        method: 'POST',
-        body: formData,
-      });
-      const initialData = await response.json();
-      
-      // Add to state immediately with 'analyzing' status
-      setDatasets((prev) => [initialData, ...prev]);
+    alert(`Target column "${targetCol}" not found. Did you mean: ${suggestionText}`);
+    
+    setIsUploading(false);
+    return false; // Prevents clearing FileUpload and adding the card
+}
 
-      // Start Polling for the result
-      const pollInterval = setInterval(async () => {
-        try {
-          const statusRes = await fetch(`http://localhost:8000/api/v1/dataset/${initialData.id}`);
-          const updatedData = await statusRes.json();
+    // 4. SUCCESS: Add the card only if no typo was found
+    setDatasets((prev) => [initialData, ...prev]);
 
-          if (updatedData.analysis_status === 'completed') {
-            setDatasets((prev) => 
-              prev.map(d => d.id === initialData.id ? updatedData : d)
-            );
-            clearInterval(pollInterval);
-          } else if (updatedData.analysis_status === 'failed') {
-            clearInterval(pollInterval);
-            alert("Analysis failed for " + file.name);
-          }
-        } catch (pollError) {
-          console.error("Polling error:", pollError);
+    // Start Polling...
+    const pollInterval = setInterval(async () => {
+      try {
+        const statusRes = await fetch(`http://localhost:8000/api/v1/dataset/${initialData.id}`);
+        const updatedData = await statusRes.json();
+
+        if (updatedData.analysis_status === 'completed') {
+          setDatasets((prev) => prev.map(d => d.id === initialData.id ? updatedData : d));
+          clearInterval(pollInterval);
+        } else if (updatedData.analysis_status === 'failed') {
+          clearInterval(pollInterval);
         }
-      }, 3000); 
+      } catch (err) {
+        clearInterval(pollInterval);
+      }
+    }, 3000);
 
-    } catch (error) {
-      console.error("Upload failed", error);
-      alert("Failed to upload file. Check if backend is running.");
-    } finally {
-      setIsUploading(false);
-    }
-  };
+    return true; // Tells FileUpload to clear the inputs
 
-  // 2. The Missing Delete Handler (Restored)
+  } catch (error) {
+    console.error("Upload failed", error);
+    alert("Failed to connect to backend. Is the server running?");
+    return false;
+  } finally {
+    setIsUploading(false);
+  }
+};
+
+  /* ---------------- Delete Handler ---------------- */
   const handleDelete = (id) => {
     setDatasets((prev) => prev.filter((d) => d.id !== id));
     if (selectedDataset?.id === id) setSelectedDataset(null);
@@ -71,21 +93,30 @@ export default function App() {
     <BrowserRouter>
       <div className="min-h-screen bg-gray-50 flex flex-col">
         <Header />
+
         <div className="flex flex-1">
           <NavLink />
+
           <main className="flex-1 p-6 max-w-7xl mx-auto w-full">
             <Routes>
-              <Route path="/" element={
+              <Route
+                path="/"
+                element={
                   <>
+                    {/* HOME VIEW */}
                     {!selectedDataset && !chatDataset && (
                       <>
-                        <FileUpload onUpload={handleUpload} isUploading={isUploading} />
+                        <FileUpload
+                          onUpload={handleUpload}
+                          isUploading={isUploading}
+                        />
+
                         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-6">
                           {datasets.map((dataset) => (
                             <DatasetCard
                               key={dataset.id}
                               dataset={dataset}
-                              onDelete={handleDelete} // FIXED: handleDelete is now defined
+                              onDelete={handleDelete}
                               onSelect={setSelectedDataset}
                               onChat={setChatDataset}
                             />
@@ -94,7 +125,20 @@ export default function App() {
                       </>
                     )}
 
-                    {selectedDataset && (
+                    {/* NEEDS USER INPUT VIEW */}
+                    {selectedDataset?.analysis_status === 'needs_user_input' && (
+                      <div className="p-6 bg-yellow-50 border border-yellow-200 rounded-lg">
+                        <h2 className="text-lg font-semibold text-yellow-800">
+                          Action Required
+                        </h2>
+                        <p className="mt-2 text-sm text-yellow-700">
+                          Please choose a valid target column to continue analysis.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* ANALYSIS VIEW */}
+                    {selectedDataset?.analysis_status === 'completed' && (
                       <AnalysisView
                         dataset={selectedDataset}
                         onBack={() => setSelectedDataset(null)}
@@ -105,6 +149,7 @@ export default function App() {
                       />
                     )}
 
+                    {/* CHAT VIEW */}
                     {chatDataset && (
                       <ChatInterface
                         dataset={chatDataset}

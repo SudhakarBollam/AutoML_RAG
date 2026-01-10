@@ -8,6 +8,7 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma 
 from dotenv import load_dotenv
 from app.core.config import CHROMA_PATH
+from app.services.target_matching import suggest_target_columns
 from app.services.target_detection import detect_target_column
 from app.services.preprocessing import preprocess_dataset
 from app.services.data_analysis import analyze_dataset
@@ -32,7 +33,9 @@ def safe_float(v):
     return float(v)
 
 
-def process_and_analyze_dataset(file_path: str, dataset_id: str):
+def process_and_analyze_dataset(file_path: str, 
+                                dataset_id: str,
+                                user_target_column: str | None = None):
     try:
         print("📊 Starting full ML pipeline for:", file_path)
 
@@ -42,9 +45,64 @@ def process_and_analyze_dataset(file_path: str, dataset_id: str):
             raise ValueError("CSV file is empty")
 
         # ---------------- TARGET DETECTION ----------------
-        target_info = detect_target_column(df)
-        target_column = target_info[0] if isinstance(target_info, (list, tuple)) else target_info
+        
+        
+# -------------------------------
+# TARGET COLUMN RESOLUTION
+# -------------------------------
+        columns = list(df.columns)
 
+        if user_target_column:
+    # Exact (case-insensitive) match
+            exact_match = next(
+        (c for c in columns if c.lower() == user_target_column.lower()),
+        None
+    )
+
+            if exact_match:
+                target_column = exact_match
+                target_source = "user_exact"
+
+            else:
+                suggestions = suggest_target_columns(
+                user_target_column,
+                columns
+        )
+
+                # app/services/ml_service.py
+
+                if suggestions:
+                    return {
+        "analysis_status": "needs_user_input", 
+        "dataset_id": dataset_id,
+        "message": f"Target column '{user_target_column}' not found.",
+        "user_input": user_target_column,
+        "suggested_targets": suggestions,
+        "columns": columns,
+        # Add these to prevent frontend "undefined" errors
+        "analysis_result": {
+            "preprocessing_report": {"flow": []}, # Prevents .join() errors on flow
+            "insights": [],
+            "feature_analysis": []
+        }
+    }
+
+        # No suggestions → fallback
+                target_column = detect_target_column(df)
+                target_source = "auto_fallback"
+
+        else:
+            target_column = detect_target_column(df)
+            target_source = "auto"
+
+        analysis_result = {
+    "dataset_id": dataset_id,
+    "analysis_status": "completed",
+    "target_column": target_column,
+    "target_source": target_source,
+    "columns": columns,
+}
+        analysis_result["columns"] = list(df.columns)
         # ---------------- PROBLEM TYPE ----------------
         problem_type = detect_problem_type(df, target_column)
 
@@ -218,7 +276,11 @@ def process_and_analyze_dataset(file_path: str, dataset_id: str):
         }
 
         print("✅ ML pipeline completed successfully")
-        return response
+        return {
+    "analysis_status": "completed",
+    "dataset_id": dataset_id,
+    "analysis_result": response
+}
 
     except Exception as e:
         print("❌ ML PIPELINE ERROR:", str(e))

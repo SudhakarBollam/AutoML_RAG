@@ -9,12 +9,14 @@ import {
   Brain,
   Sparkles,
 } from "lucide-react";
+import { Target, Info } from "lucide-react"; // Assuming Lucide is installed
+
 //hiiii
 
 export default function FileUpload({ onUpload, isUploading }) {
   const [dragActive, setDragActive] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
-
+  const [targetColumn, setTargetColumn] = useState("");
   /* ================= SCROLL TO BOTTOM ================= */
   useEffect(() => {
     if (isUploading) {
@@ -46,12 +48,24 @@ export default function FileUpload({ onUpload, isUploading }) {
       }
     }
   }, []);
-
-  const handleUpload = async () => {
-    if (!selectedFile) return;
-    await onUpload(selectedFile);
+  const handleUploadClick = async () => {
+  if (!selectedFile || isUploading) return;
+  
+  // 1. Send both file and target column
+  const success = await onUpload(selectedFile, targetColumn.trim());
+  
+  // 2. Only reset the UI if the backend accepted the input
+  if (success) {
     setSelectedFile(null);
-  };
+    setTargetColumn("");
+  }
+};
+
+  // const handleUpload = async () => {
+  //   if (!selectedFile) return;
+  //   await onUpload(selectedFile, targetColumn.trim());
+  //   setSelectedFile(null);
+  // };
 
   const formatFileSize = (bytes) => {
     if (bytes < 1024) return `${bytes} B`;
@@ -123,7 +137,7 @@ export default function FileUpload({ onUpload, isUploading }) {
             onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
             className="hidden"
           />
-
+        
           {selectedFile ? (
             <div className="flex flex-col items-center gap-5">
               <div className="h-16 w-16 rounded-2xl bg-indigo-100 flex items-center justify-center">
@@ -152,16 +166,16 @@ export default function FileUpload({ onUpload, isUploading }) {
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    handleUpload();
+                    handleUploadClick();
                   }}
-                  disabled={isUploading}
+                  disabled={isUploading|| !selectedFile}
                   className="
                     rounded-md bg-black px-5 py-2 text-sm text-white
                     hover:bg-gray-800 transition
                     disabled:opacity-60 disabled:cursor-not-allowed
                   "
                 >
-                  {isUploading ? (
+                  {/* {isUploading ? (
                     <>
                       <Loader2 className="h-4 w-4 inline mr-2 animate-spin" />
                       Uploading
@@ -171,7 +185,12 @@ export default function FileUpload({ onUpload, isUploading }) {
                       <Upload className="h-4 w-4 inline mr-2" />
                       Analyze Dataset
                     </>
-                  )}
+                  )} */}
+                  {isUploading ? (
+    <><Loader2 className="mr-2 animate-spin" /> Analyzing...</>
+  ) : (
+    <><Upload className="mr-2" /> Analyze Dataset</>
+  )}
                 </button>
               </div>
             </div>
@@ -197,6 +216,32 @@ export default function FileUpload({ onUpload, isUploading }) {
             </div>
           )}
         </div>
+<div className="mt-6 max-w-md mx-auto space-y-2">
+  <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+    <Target size={16} className="text-indigo-500" />
+    Target Column Name
+  </label>
+  
+  <div className="relative">
+    <input
+      type="text"
+      placeholder="e.g. price, label, outcome"
+      value={targetColumn}
+      onChange={(e) => setTargetColumn(e.target.value)}
+      className="w-full rounded-md border-gray-300 pl-4 pr-10 py-2.5 text-sm 
+                 shadow-sm transition-shadow focus:ring-2 focus:ring-indigo-500 
+                 focus:border-indigo-500 placeholder:text-gray-400"
+    />
+    <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none">
+       <Info size={14} className="text-gray-300" />
+    </div>
+  </div>
+  
+  <p className="text-[11px] text-gray-400 flex items-center gap-1">
+    <span className="font-medium text-indigo-600">Pro tip:</span> 
+    Auto-detection works best with labeled datasets.
+  </p>
+</div>
       </div>
     </section>
   );
