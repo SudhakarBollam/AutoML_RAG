@@ -2,6 +2,38 @@ import pandas as pd
 import numpy as np
 import math
 
+def compute_boxplot_stats(df: pd.DataFrame):
+    boxplot_data = {}
+
+    numeric_cols = df.select_dtypes(include=["int64", "float64"]).columns
+
+    for col in numeric_cols:
+        series = df[col].dropna()
+        if series.empty:
+            continue
+
+        q1 = series.quantile(0.25)
+        q2 = series.quantile(0.50)
+        q3 = series.quantile(0.75)
+        iqr = q3 - q1
+
+        lower = q1 - 1.5 * iqr
+        upper = q3 + 1.5 * iqr
+
+        outliers = ((series < lower) | (series > upper)).sum()
+
+        boxplot_data[col] = {
+            "min": float(series.min()),
+            "q1": float(q1),
+            "median": float(q2),
+            "q3": float(q3),
+            "max": float(series.max()),
+            "outliers": int(outliers),
+        }
+
+    return boxplot_data
+
+
 def safe_float(value, default=None):
     """
     Converts NaN / inf to a JSON-safe value

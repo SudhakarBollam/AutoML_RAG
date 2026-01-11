@@ -11,7 +11,7 @@ from app.core.config import CHROMA_PATH
 from app.services.target_matching import suggest_target_columns
 from app.services.target_detection import detect_target_column
 from app.services.preprocessing import preprocess_dataset
-from app.services.data_analysis import analyze_dataset
+from app.services.data_analysis import analyze_dataset, compute_boxplot_stats
 from app.services.model_selection import select_best_model
 from app.services.model_runner import train_and_evaluate_models
 from app.services.rag_service import index_dataset_for_rag
@@ -43,21 +43,21 @@ def process_and_analyze_dataset(file_path: str,
         df = pd.read_csv(file_path)
         if df.empty:
             raise ValueError("CSV file is empty")
+        
+        #----------------- BOXPLOT STATS ----------------
+        boxplot_stats = compute_boxplot_stats(df)
 
         # ---------------- TARGET DETECTION ----------------
         
-        
-# -------------------------------
-# TARGET COLUMN RESOLUTION
-# -------------------------------
+        # -------------------------------
+        # TARGET COLUMN RESOLUTION
+        # -------------------------------
         columns = list(df.columns)
 
         if user_target_column:
-    # Exact (case-insensitive) match
+        # Exact (case-insensitive) match
             exact_match = next(
-        (c for c in columns if c.lower() == user_target_column.lower()),
-        None
-    )
+        (c for c in columns if c.lower() == user_target_column.lower()),None)
 
             if exact_match:
                 target_column = exact_match
@@ -96,42 +96,36 @@ def process_and_analyze_dataset(file_path: str,
             target_source = "auto"
 
         analysis_result = {
-    "dataset_id": dataset_id,
-    "analysis_status": "completed",
-    "target_column": target_column,
-    "target_source": target_source,
-    "columns": columns,
-}
+            "dataset_id": dataset_id,
+            "analysis_status": "completed",
+            "target_column": target_column,
+            "target_source": target_source,
+            "columns": columns,
+        }
         analysis_result["columns"] = list(df.columns)
         # ---------------- PROBLEM TYPE ----------------
         problem_type = detect_problem_type(df, target_column)
 
         # ---------------- PREPROCESSING ----------------
-        X_processed, y, preprocessor = preprocess_dataset(
-            df=df,
-            target=target_column
-        )
-        # ---------------- PREPROCESSING REPORT ----------------
-        numeric_cols = df.select_dtypes(include=["int64", "float64"]).columns.tolist()
-        categorical_cols = df.select_dtypes(
-            include=["object", "category", "bool"]
-        ).columns.tolist()
+        X_processed, y, preprocessor, preprocessing_meta = preprocess_dataset(df, target_column)
 
-        preprocessing_report = {
-            "flow": [
-                "Raw Dataset",
-                "Missing Value Handling",
-                "Categorical Encoding",
-                "Numerical Scaling",
-                "Model Ready Dataset"
-            ],
-            "numeric_strategy": "Median Imputation + Standard Scaling",
-            "categorical_strategy": "Most Frequent Imputation + One-Hot Encoding",
-            "numeric_features": numeric_cols,
-            "categorical_features": categorical_cols,
-            "total_features_before": int(df.shape[1] - 1),
-            "total_features_after": int(X_processed.shape[1])
-        }
+        numeric_cols = preprocessing_meta["numeric_cols"]
+        categorical_cols = preprocessing_meta["categorical_cols"]
+        preprocessing_visuals = preprocessing_meta["visuals"]
+
+        # ---------------- PREPROCESSING REPORT ----------------
+        numeric_cols = preprocessing_meta["numeric_cols"]
+        categorical_cols = preprocessing_meta["categorical_cols"]
+
+        preprocessing_flow = [
+        {"step": 1, "label": "Raw Dataset"},
+        {"step": 2, "label": "Missing Value Imputation"},
+        {"step": 3, "label": "Outlier Detection (No Row Removal)"},
+        {"step": 4, "label": "Categorical Encoding"},
+        {"step": 5, "label": "Numerical Scaling"},
+        {"step": 6, "label": "Model-Ready Dataset"}
+        ]
+
         missing_summary = {
             col: int(df[col].isna().sum())
             for col in df.columns
@@ -154,6 +148,40 @@ def process_and_analyze_dataset(file_path: str,
                 ).columns.tolist()
             }
         ]
+        #-----------------COLUMN TRASNSFORMATION DETAILS ----------------
+
+        column_transformations = []
+
+        for col in df.columns:
+            if col == target_column:
+                continue
+
+            col_info = {
+                "column": col,
+                "missing_handling": "None",
+                "scaling": "None",
+                "encoding": "None",
+                "outlier_handling": "Detected only (no removal)"
+            }
+
+            if df[col].isna().any():
+                col_info["missing_handling"] = (
+                    "Median Imputation" if col in numeric_cols
+                    else "Most Frequent Imputation"
+                )
+
+            if col in numeric_cols:
+                if df[col].nunique() > 2:
+                    col_info["scaling"] = "StandardScaler"
+                else:
+                    col_info["scaling"] = "Skipped (binary feature)"
+
+            if col in categorical_cols:
+                col_info["encoding"] = "One-Hot Encoding"
+
+            column_transformations.append(col_info)
+
+
 
         # ---------------- DATA ANALYSIS ----------------
         raw_analysis = analyze_dataset(df)
@@ -267,8 +295,11 @@ def process_and_analyze_dataset(file_path: str,
             "best_model": best_model,
             "model_metrics": model_results["all_model_metrics"],
             "feature_analysis": analysis["feature_analysis"],
-            "preprocessing_report": preprocessing_report,
+            "boxplot_stats": boxplot_stats,
+            "column_transformations": column_transformations,
+            "preprocessing_flow": preprocessing_flow,
             "missing_summary": missing_summary,
+            "preprocessing_visuals": preprocessing_visuals,
             "numeric_distributions": raw_analysis["numeric_distributions"],
             "insights": analysis["insights"],
             "preprocessing_steps": preprocessing_steps,

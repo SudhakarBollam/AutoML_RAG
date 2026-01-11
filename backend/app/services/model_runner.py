@@ -75,7 +75,7 @@ def train_and_evaluate_models(X, y=None, task="classification"):
             y_train_pred = model.predict(X_train)
             y_test_pred = model.predict(X_test)
 
-            rmse = mean_squared_error(y_test, y_test_pred, squared=False)
+            rmse = rmse = np.sqrt(mean_squared_error(y_test, y_test_pred))
             r2 = r2_score(y_test, y_test_pred)
 
             cv_scores = cross_val_score(

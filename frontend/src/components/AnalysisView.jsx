@@ -1,11 +1,15 @@
 import { useState ,useEffect} from 'react';
 import {
-  BarChart,
-  Bar,
+  LineChart,
+  Line,
   XAxis,
   YAxis,
+  CartesianGrid,
   Tooltip,
+  Legend,
   ResponsiveContainer,
+  BarChart,
+  Bar
 } from "recharts";
 
 import {
@@ -23,33 +27,10 @@ import {
 } from 'lucide-react';
 
 export default function AnalysisView({ dataset, onBack, onChat }) {
-  
   const analysis = dataset?.analysis_result;
   const [activeTab, setActiveTab] = useState('models');
   const [ragStatus, setRagStatus] = useState(dataset?.rag_status ?? 'pending');
-  console.log(dataset.analysis_status, dataset.analysis_result);
-  if (
-    !dataset ||
-    dataset.analysis_status !== "completed" ||
-    !analysis ||
-    !analysis.statistical_summary
-  ) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[400px] text-center">
-        <AlertTriangle className="w-12 h-12 text-yellow-500 mb-4" />
-        <h3 className="text-lg font-semibold mb-2">Analysis Not Ready</h3>
-        <p className="text-gray-500 mb-4">
-          Waiting for valid analysis results.
-        </p>
-        <button
-          onClick={onBack}
-          className="px-4 py-2 border rounded-md hover:bg-gray-50"
-        >
-          Go Back
-        </button>
-      </div>
-    );
-  }
+
 
 useEffect(() => {
   if (ragStatus === 'ready') return;
@@ -95,6 +76,19 @@ useEffect(() => {
     }
   };
 
+  const boxplotChartData = analysis.boxplot_stats
+  ? Object.entries(analysis.boxplot_stats).map(([feature, stats]) => ({
+      feature,
+      min: stats.min,
+      q1: stats.q1,
+      median: stats.median,
+      q3: stats.q3,
+      max: stats.max,
+      outliers: stats.outliers
+    }))
+  : [];
+
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -120,19 +114,19 @@ useEffect(() => {
           </button>
 
           {ragStatus === 'ready' ? (
-  <button
-    onClick={onChat}
-    className="flex items-center px-3 py-2 bg-black text-white rounded-md"
-  >
-    <Brain className="w-4 h-4 mr-2" />
-    Ask Questions
-  </button>
-) : (
-  <div className="text-sm text-gray-500 flex items-center gap-2">
-    <Loader2 className="w-4 h-4 animate-spin" />
-    Preparing chat (indexing embeddings)...
-  </div>
-)}
+            <button
+              onClick={onChat}
+              className="flex items-center px-3 py-2 bg-black text-white rounded-md"
+            >
+              <Brain className="w-4 h-4 mr-2" />
+              Ask Questions
+            </button>
+          ) : (
+            <div className="text-sm text-gray-500 flex items-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Preparing chat (indexing embeddings)...
+            </div>
+          )}
         </div>
       </div>
 
@@ -358,96 +352,123 @@ useEffect(() => {
             ))}
           </div>
         )}
-        {activeTab === "preprocessing" && (
-        <div className="mt-6 space-y-8">
+        {/* PREPROCESSING */}
+        {activeTab === 'preprocessing' && (
+        <div className="mt-6 space-y-6">
 
-          {/* FLOWCHART */}
-          <div>
-            <h3 className="text-lg font-semibold mb-3">Preprocessing Flow</h3>
-            <div className="flex flex-wrap items-center gap-3 text-sm">
-              {analysis?.preprocessing_report?.flow?.map((step, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <div className="px-3 py-2 border rounded bg-gray-50 font-medium">
-                    {step}
+          {/* Preprocessing Flow */}
+          <div className="border rounded-lg p-4 bg-white mb-6">
+            <h3 className="font-semibold mb-3">Preprocessing Flow</h3>
+
+            <div className="flex flex-wrap items-center gap-3">
+              {analysis.preprocessing_flow.map((node, i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <div className="px-4 py-2 border rounded bg-gray-50 text-sm font-medium">
+                    {node.step}. {node.label}
                   </div>
-                  {i < analysis.preprocessing_report.flow.length - 1 && (
+
+                  {i !== analysis.preprocessing_flow.length - 1 && (
                     <span className="text-gray-400">→</span>
                   )}
                 </div>
               ))}
             </div>
           </div>
+        
+          {/* Outlier Summary */}
+          {analysis.preprocessing_visuals?.outliers && (
+            <div className="border rounded-lg p-4 bg-white">
+              <h3 className="font-semibold mb-2">Outlier Analysis</h3>
 
-          {/* STRATEGY SUMMARY */}
-          <div className="border rounded-lg p-4 bg-white">
-            <h4 className="font-semibold mb-2">Preprocessing Summary</h4>
-            <p className="text-sm text-gray-700">
-              Numeric features were processed using <b>{analysis.preprocessing_report.numeric_strategy}</b>.
-              Categorical features were processed using <b>{analysis.preprocessing_report.categorical_strategy}</b>.
-              Feature space expanded from{" "}
-              <b>{analysis.preprocessing_report.total_features_before}</b> to{" "}
-              <b>{analysis.preprocessing_report.total_features_after}</b> features.
-            </p>
-          </div>
+              <p className="text-sm text-gray-600 mb-3">
+                {analysis.preprocessing_visuals.outliers.message}
+              </p>
 
-          {/* MISSING VALUES BAR CHART */}
-          <div>
-            <h4 className="font-semibold mb-3">Missing Values (Before Preprocessing)</h4>
-
-            {Object.keys(analysis.missing_summary).length > 0 ? (
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart
-                  data={Object.entries(analysis.missing_summary).map(
-                    ([feature, missing]) => ({ feature, missing })
-                  )}
-                >
-                  <XAxis dataKey="feature" />
-                  <YAxis />
-                  <Tooltip />
-                  <Bar dataKey="missing" fill="#f59e0b" />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <p className="text-sm text-gray-500">No missing values detected.</p>
-            )}
-          </div>
-
-          {/* NUMERIC DISTRIBUTIONS TABLE */}
-          <div>
-            <h4 className="font-semibold mb-3">Numeric Feature Distributions (Raw Data)</h4>
-
-            <div className="overflow-x-auto">
               <table className="w-full border text-sm">
                 <thead className="bg-gray-50">
                   <tr>
-                    {["Feature", "Mean", "Median", "Std", "Min", "Max", "Skewness"].map(h => (
-                      <th key={h} className="p-3 border text-left">{h}</th>
-                    ))}
+                    <th className="p-2 border">Feature</th>
+                    <th className="p-2 border">Outliers Detected</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {Object.entries(analysis.numeric_distributions).map(
-                    ([feature, stats], i) => (
-                      <tr key={i} className="border-t">
-                        <td className="p-3 font-mono">{feature}</td>
-                        <td className="p-3">{stats.mean}</td>
-                        <td className="p-3">{stats.median}</td>
-                        <td className="p-3">{stats.std}</td>
-                        <td className="p-3">{stats.min}</td>
-                        <td className="p-3">{stats.max}</td>
-                        <td className="p-3">{stats.skewness}</td>
-                      </tr>
-                    )
-                  )}
-            </tbody>
-          </table>
+                  {Object.entries(
+                    analysis.preprocessing_visuals.outliers.before || {}
+                  ).map(([col, stats], i) => (
+                    <tr key={i}>
+                      <td className="p-2 border">{col}</td>
+                      <td className="p-2 border">
+                        {stats.outlier_count ?? 0}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Outlier Visualization */}
+          <div className="border rounded-lg p-4 bg-white">
+            <h3 className="font-semibold mb-3">Outlier Distribution (Box Summary)</h3>
+
+            {boxplotChartData.length === 0 ? (
+              <p className="text-sm text-gray-500">
+                No numeric features available for outlier analysis.
+              </p>
+            ) : (
+              <ResponsiveContainer width="100%" height={320}>
+                <BarChart data={boxplotChartData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="feature" />
+                  <YAxis />
+                  <Tooltip />
+
+                  <Bar dataKey="min" stackId="a" fill="#e5e7eb" />
+                  <Bar dataKey="q1" stackId="a" fill="#93c5fd" />
+                  <Bar dataKey="median" stackId="a" fill="#2563eb" />
+                  <Bar dataKey="q3" stackId="a" fill="#93c5fd" />
+                  <Bar dataKey="max" stackId="a" fill="#e5e7eb" />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+
+            <p className="text-xs text-gray-500 mt-2">
+              Box-style visualization based on IQR. Outliers detected but not removed;
+              scaling reduces their influence.
+            </p>
+          </div>
+
+
+          {/* Column-wise Preprocessing */}
+          <div className="border rounded-lg p-4 bg-white">
+            <h3 className="font-semibold mb-3">Column-wise Preprocessing</h3>
+
+            <table className="w-full border text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="p-2 border">Column</th>
+                  <th className="p-2 border">Missing Handling</th>
+                  <th className="p-2 border">Scaling</th>
+                  <th className="p-2 border">Encoding</th>
+                  <th className="p-2 border">Outlier Handling</th>
+                </tr>
+              </thead>
+              <tbody>
+                {analysis.column_transformations.map((col, i) => (
+                  <tr key={i} className="border-t">
+                    <td className="p-2 border font-mono">{col.column}</td>
+                    <td className="p-2 border">{col.missing_handling}</td>
+                    <td className="p-2 border">{col.scaling}</td>
+                    <td className="p-2 border">{col.encoding}</td>
+                    <td className="p-2 border">{col.outlier_handling}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
         </div>
-      </div>
-
-    </div>
-  )}
-
-        
+      )}        
       </div>
     </div>
   );
